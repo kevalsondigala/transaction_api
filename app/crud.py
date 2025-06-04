@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from models import Transaction
 from schemas import TransactionIn
-from sqlalchemy import extract
+from sqlalchemy import func
 from collections import defaultdict
 
 def add_transactions(db: Session, transactions: list[TransactionIn]):
@@ -9,25 +9,24 @@ def add_transactions(db: Session, transactions: list[TransactionIn]):
     for t in transactions:
         exists = db.query(Transaction).filter_by(user_id=t.user_id, timestamp=t.timestamp, amount=t.amount).first()
         if not exists:
-            tx = Transaction(**t.dict())
+            tx = Transaction(**t.model_dump())
             db.add(tx)
             added.append(tx)
     db.commit()
     return added
 
 def get_summary(db: Session, user_id: str, month: str):
-    year, month_num = map(int, month.split('-'))
+    # month format: "YYYY-MM"
     txns = db.query(Transaction).filter(
         Transaction.user_id == user_id,
-        extract('year', Transaction.timestamp) == year,
-        extract('month', Transaction.timestamp) == month_num
+        func.strftime('%Y-%m', Transaction.timestamp) == month
     ).all()
 
-    summary = defaultdict(float)
+    summary = {}
     total = 0.0
 
     for txn in txns:
-        summary[txn.category] += txn.amount
+        summary[txn.category] = summary.get(txn.category, 0.0) + txn.amount
         total += txn.amount
 
     return {
